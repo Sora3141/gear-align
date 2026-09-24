@@ -17,7 +17,7 @@ ES モジュールを使うので `file://` では動かない。ローカルサ
 ## 🔗 リンク
 
 - 遊ぶ: https://sora3141.github.io/gear-align/
-- 制作: [T.OFO](https://sora3141.github.io/)
+- 制作: [T.OF...](https://sora3141.github.io/)
 
 ## シェア
 
