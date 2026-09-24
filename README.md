@@ -1,6 +1,6 @@
 # GEAR ALIGN — 歯車の向きを揃えるパズル
 
-**遊ぶ： https://sora3141.github.io/gear-align/** （スマホでもそのまま遊べて、アプリとしてインストールもできる）
+**遊ぶ： https://t-of.github.io/gear-align/** （スマホでもそのまま遊べて、アプリとしてインストールもできる）
 
 灰色の**原動力**（ハンドルの付いた無地の歯車）が回すと、噛み合った歯車が隣どうし逆向きに回る。
 ただし**歯車を選ぶとそれだけ奥に下がって噛み合いから外れる**
@@ -10,8 +10,8 @@
 
 ## 🔗 リンク
 
-- 遊ぶ: https://sora3141.github.io/gear-align/
-- 制作: [T.OF...](https://sora3141.github.io/)
+- 遊ぶ: https://t-of.github.io/gear-align/
+- 制作: [T.OF...](https://t-of.github.io/)
 
 ## 遊び方
 
