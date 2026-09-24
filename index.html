@@ -5,6 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0b0d10" />
 <meta name="description" content="歯車を持ち上げて回し、合いマークの向きを全部揃えるパズル。" />
+<!-- リンクを貼ったときのプレビュー（X・LINE・Slack など） -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="GEAR ALIGN" />
+<meta property="og:title" content="GEAR ALIGN — 歯車の向きを揃えるパズル" />
+<meta property="og:description" content="歯車を持ち上げて原動力を回し、合いマークの向きを全部揃える。全 80 コース、スマホでも遊べてアプリとしても入れられる。" />
+<meta property="og:url" content="https://sora3141.github.io/gear-align/" />
+<meta property="og:image" content="https://sora3141.github.io/gear-align/icons/og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:locale" content="ja_JP" />
+<meta name="twitter:card" content="summary_large_image" />
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png" />
@@ -72,6 +83,9 @@
         <div class="row">
           <button id="again" class="primary">次の盤面</button>
           <button id="retry">同じ盤面をもう一度</button>
+        </div>
+        <div class="row share-row">
+          <button id="share-result" class="share-btn">結果をシェア</button>
         </div>
       </div>
     </div>
@@ -204,6 +218,31 @@
         <button id="share" class="link">リンクをコピー</button>
       </div>
     </div>
+
+    <div class="field">
+      <span>シェア</span>
+      <div class="row">
+        <button id="share-board" class="share-btn">この盤面をシェア</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<!-- シェア：送る文面を見せてから、共有メニュー・コピー・X・LINE を選んでもらう -->
+<dialog id="share-sheet" class="sheet narrow">
+  <form method="dialog" class="sheet-head">
+    <h2 id="share-title">シェア</h2>
+    <button class="icon" aria-label="閉じる">×</button>
+  </form>
+  <div class="sheet-body">
+    <textarea id="share-text" class="share-text" rows="4" readonly aria-label="送る文面"></textarea>
+    <div class="share-actions">
+      <button id="share-native" class="primary share-native" hidden>共有メニューを開く</button>
+      <button id="share-copy" class="share-copy">テキストとリンクをコピー</button>
+      <a id="share-x" class="share-link share-x" target="_blank" rel="noopener">X でポスト</a>
+      <a id="share-line" class="share-link share-line" target="_blank" rel="noopener">LINE で送る</a>
+    </div>
+    <p class="share-status" id="share-status" aria-live="polite"></p>
   </div>
 </dialog>
 

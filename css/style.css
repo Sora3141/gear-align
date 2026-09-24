@@ -830,6 +830,56 @@ dialog.sheet::backdrop { background: rgba(4, 5, 6, 0.7); backdrop-filter: blur(3
   border-radius: 7px; padding: 5px 10px;
 }
 
+/* シェア */
+.share-btn, .share-native, .share-copy, .share-link { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.share-btn::before, .share-native::before, .share-copy::before, .share-link::before {
+  content: "";
+  width: 16px; height: 16px;
+  flex: none;
+  background: currentColor;
+  -webkit-mask: var(--ico) center / contain no-repeat;
+  mask: var(--ico) center / contain no-repeat;
+}
+.share-btn, .share-native { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 15V3.5M7.5 8 12 3.5 16.5 8'/%3E%3Cpath d='M8 11H6a1.5 1.5 0 0 0-1.5 1.5v7A1.5 1.5 0 0 0 6 21h12a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 18 11h-2'/%3E%3C/svg%3E"); }
+.share-copy { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='8.5' y='8.5' width='12' height='12' rx='2'/%3E%3Cpath d='M15.5 8.5V5A1.5 1.5 0 0 0 14 3.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h3.5'/%3E%3C/svg%3E"); }
+.share-x { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M17.8 3h3.1l-6.8 7.8L22 21h-6.2l-4.9-6.4L5.3 21H2.2l7.3-8.3L2 3h6.4l4.4 5.8Zm-1.1 16.2h1.7L7.4 4.7H5.6Z'/%3E%3C/svg%3E"); }
+.share-line { --ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c0 .3-.2 1 .9.5s5.9-3.5 8-6c1.4-1.6 2-3.2 2-4.8C22 6.6 17.5 3 12 3Zm-5.5 10.6H4.6a.5.5 0 0 1-.5-.5V9.2a.5.5 0 0 1 1 0v3.4h1.4a.5.5 0 0 1 0 1Zm2-.5a.5.5 0 0 1-1 0V9.2a.5.5 0 0 1 1 0Zm4.7 0a.5.5 0 0 1-.9.3l-2-2.7v2.4a.5.5 0 0 1-1 0V9.2a.5.5 0 0 1 .9-.3l2 2.7V9.2a.5.5 0 0 1 1 0Zm3.1-2.4a.5.5 0 0 1 0 1h-1.4v.9h1.4a.5.5 0 0 1 0 1h-1.9a.5.5 0 0 1-.5-.5V9.2a.5.5 0 0 1 .5-.5h1.9a.5.5 0 0 1 0 1h-1.4v.9Z'/%3E%3C/svg%3E"); }
+.overlay .share-row { margin-top: 10px; }
+.overlay .share-btn { color: var(--accent-hi); }
+.share-text {
+  width: 100%;
+  resize: none;
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.7;
+  color: #f3eee2;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #07080a;
+  border: 1px solid #000;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.9), 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.share-text:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.share-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.share-actions .share-native, .share-actions .share-copy { grid-column: 1 / -1; }
+.share-actions .share-native[hidden] { display: none; }
+/* X と LINE はリンクだが、見た目はほかのキーと揃える */
+a.share-link {
+  font-size: 0.84rem;
+  color: var(--fg);
+  text-decoration: none;
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1px solid #000;
+  background: linear-gradient(180deg, #2a2e35, #1c1f24);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.11), inset 0 -1px 0 rgba(0, 0, 0, 0.4), 0 2px 0 #000, 0 6px 12px -6px rgba(0, 0, 0, 0.8);
+  transition: background 140ms, color 140ms;
+}
+a.share-link:hover { background: linear-gradient(180deg, #32373f, #22262b); color: var(--accent-hi); }
+a.share-link:active { transform: translateY(2px); box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6); }
+a.share-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.share-status { margin: 0; min-height: 1.2em; font-size: 0.74rem; color: var(--accent-hi); }
+
 /* アプリとしてインストール */
 .field.install { align-items: flex-start; }
 .install-box { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; flex: 1 1 auto; min-width: 0; }

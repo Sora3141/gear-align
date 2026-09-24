@@ -38,6 +38,7 @@ const app = {
   auto: false,      // 解答の再生中（手動の操作を止める）
   replay: null,      // 解答プレーヤーの状態
   assisted: false,   // この盤面で自動の解答を使った（記録に残さない）
+  optimal: null,     // 配った直後の盤面を揃えるお手本の手数（シェアの文面に使う）
   startedAt: 0,
   elapsed: 0,
   ticker: 0,
@@ -70,6 +71,8 @@ function build() {
   }
   app.layout = layout;
   app.puzzle = p;
+  const first = planFor(p);
+  app.optimal = first ? first.length : null;
   app.cells = [];
   app.suggestion = null;
   app.order = '';
@@ -945,6 +948,88 @@ function scrollHints() {
 }
 document.querySelector('.board-wrap').addEventListener('scroll', scrollHints, { passive: true });
 
+// ---- シェア ------------------------------------------------------------
+// 送る文面を先に見せてから、共有メニュー（使えるブラウザだけ）・コピー・X・LINE を選んでもらう。
+// リンクはいまの盤面の URL（#並べ方/大きさ/持ち上げ数/向き/シード）なので、相手も同じ盤面で遊べる。
+
+const courseText = () => `${app.mode.name} ${sizeWords(app.mode).option(app.size)}`
+  + (app.lifts > 1 ? `・${app.lifts} つ持ち上げ` : '');
+function goalText() {
+  const p = app.puzzle;
+  return p.goalMode === 'distinct' ? '（全部ちがう向き）'
+    : p.goalMode === 'dir' ? `（向き ${DIR_ARROW(p.dirAngle(p.goal))} 指定）` : '';
+}
+
+function shareUrl() {
+  writeHash();
+  return location.href;
+}
+
+// 揃えた結果の文面
+function resultText() {
+  const p = app.puzzle, opt = app.optimal;
+  const head = `歯車パズル GEAR ALIGN の「${courseText()}」${goalText()}を`;
+  if (app.assisted) return `${head}揃えました（解答を見ながら）。同じ盤面に挑戦してみて！`;
+  const vs = opt === null ? ''
+    : p.moves < opt ? `お手本（${opt} 手）より短い！`
+    : p.moves === opt ? `お手本と同じ手数！` : `お手本は ${opt} 手。`;
+  return `${head} ${p.moves} 手・${clockText(app.elapsed)} で揃えました。${vs}同じ盤面に挑戦してみて！`;
+}
+
+// 遊んでいる盤面をすすめる文面
+function boardText() {
+  const opt = app.optimal;
+  return `歯車パズル GEAR ALIGN の「${courseText()}」${goalText()}。この盤面、何手で揃えられる？`
+    + (opt === null ? '' : `（お手本は ${opt} 手）`);
+}
+
+let sharing = { text: '', url: '' };
+function openShare(kind) {
+  sharing = { text: kind === 'result' ? resultText() : boardText(), url: shareUrl() };
+  $('share-title').textContent = kind === 'result' ? '結果をシェア' : 'この盤面をシェア';
+  $('share-text').value = `${sharing.text}\n${sharing.url}`;
+  $('share-native').hidden = !navigator.share;
+  $('share-x').href = `https://x.com/intent/post?text=${encodeURIComponent(sharing.text)}&url=${encodeURIComponent(sharing.url)}`;
+  $('share-line').href = `https://line.me/R/share?text=${encodeURIComponent(`${sharing.text}\n${sharing.url}`)}`;
+  $('share-status').textContent = '';
+  openSheet('share-sheet');
+  // 文面の長さに合わせて欄を伸ばす（URL の最後まで見せる）
+  const ta = $('share-text');
+  ta.style.height = 'auto';
+  ta.style.height = `${ta.scrollHeight + 2}px`;
+}
+
+async function copyText(text) {
+  // 権限の確認待ちなどで返事が来ないことがあるので、1.5 秒で見切って下の方法に切り替える
+  try {
+    const done = await Promise.race([
+      navigator.clipboard.writeText(text).then(() => true),
+      new Promise((r) => setTimeout(() => r(false), 1500)),
+    ]);
+    if (done) return true;
+  } catch { /* 下の方法で */ }
+  // クリップボードの API が使えない（権限が無い）ときは、文面を選んでコピーする
+  const ta = $('share-text');
+  ta.focus(); ta.select();
+  try { return document.execCommand('copy'); } catch { return false; }
+}
+
+$('share-result').addEventListener('click', () => openShare('result'));
+$('share-board').addEventListener('click', () => openShare('board'));
+$('share-native').addEventListener('click', async () => {
+  try {
+    await navigator.share({ title: 'GEAR ALIGN', text: sharing.text, url: sharing.url });
+    $('share-sheet').close();
+  } catch (e) {
+    if (e && e.name !== 'AbortError') $('share-status').textContent = '共有メニューを開けませんでした。コピーして送ってください。';
+  }
+});
+$('share-copy').addEventListener('click', async () => {
+  const ok2 = await copyText(`${sharing.text}\n${sharing.url}`);
+  $('share-status').textContent = ok2 ? 'コピーしました。LINE やメッセージに貼り付けて送れます。'
+    : 'コピーできませんでした。上の文面を長押し（または選択）してコピーしてください。';
+});
+
 // 設定と遊び方はダイアログに入れて、ふだんの画面には出さない
 const openSheet = (id) => { const d = $(id); if (!d.open) d.showModal(); };
 $('settings-open').addEventListener('click', () => openSheet('settings'));
@@ -956,7 +1041,7 @@ function openCourse() {
   if (on) on.scrollIntoView({ block: 'center' });
 }
 $('help-open').addEventListener('click', () => openSheet('help'));
-for (const id of ['course', 'settings', 'help', 'confirm']) {
+for (const id of ['course', 'settings', 'help', 'confirm', 'share-sheet']) {
   // 外側をクリックしても閉じる
   $(id).addEventListener('click', (e) => { if (e.target === $(id)) $(id).close(); });
 }
@@ -964,7 +1049,7 @@ for (const id of ['course', 'settings', 'help', 'confirm']) {
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement) return;
   const k = e.key;
-  if ($('course').open || $('settings').open || $('help').open || $('confirm').open) return;   // ダイアログ中は止める
+  if (document.querySelector('dialog[open]')) return;   // ダイアログ中は止める
   if (e.target instanceof HTMLButtonElement && (k === ' ' || k === 'Enter')) return;
   // 解答の再生中は、キーもプレーヤーの操作になる
   if (app.replay) {

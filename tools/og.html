@@ -1,0 +1,35 @@
+<!doctype html>
+<!-- リンクのプレビュー画像（icons/og.png、1200×630）を作るためのページ。
+     ./serve.sh のあと、Chrome で 1200×630 のスクリーンショットを撮る（README の手順）。 -->
+<html lang="ja"><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&display=swap">
+<style>
+  html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; background: #0a0b0d; }
+  body {
+    position: relative;
+    background:
+      radial-gradient(70% 90% at 78% 50%, rgba(226, 181, 76, 0.12), transparent 60%),
+      radial-gradient(120% 100% at 30% 0%, #1c1f24, #0a0b0d 70%);
+    font-family: "Hiragino Sans", "Noto Sans JP", sans-serif;
+    color: #ece8df;
+  }
+  .board { position: absolute; right: 40px; top: 28px; width: 600px; height: 574px; overflow: hidden; border-radius: 26px;
+    box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.9); }
+  .board iframe { position: absolute; border: 0; width: 700px; height: 1100px; left: -25px; top: -66px; transform: scale(0.86); transform-origin: 0 0; }
+  .text { position: absolute; left: 70px; top: 0; bottom: 0; width: 470px; display: flex; flex-direction: column; justify-content: center; gap: 22px; }
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .brand img { width: 84px; height: 84px; filter: drop-shadow(0 6px 10px rgba(0,0,0,.6)); }
+  h1 { margin: 0; font: 700 64px/1 "Chakra Petch", sans-serif; letter-spacing: 0.12em; }
+  h1 span { color: #e2b54c; display: block; margin-top: 6px; }
+  p { margin: 0; font-size: 28px; line-height: 1.6; color: #c9c4b8; font-weight: 600; }
+  .tags { display: flex; gap: 10px; flex-wrap: wrap; }
+  .tags b { font-size: 19px; font-weight: 600; color: #ffd97a; padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(226,181,76,.45); background: rgba(226,181,76,.08); }
+</style></head>
+<body>
+  <div class="text">
+    <div class="brand"><img src="../icons/icon.svg" alt=""><h1>GEAR<span>ALIGN</span></h1></div>
+    <p>歯車を持ち上げて回し、<br>合いマークの向きを全部揃える。</p>
+    <div class="tags"><b>全 80 コース</b><b>なぞって回せる</b><b>アプリで遊べる</b></div>
+  </div>
+  <div class="board"><iframe src="../index.html#r6/12/1/f/OGIMG" scrolling="no"></iframe></div>
+</body></html>

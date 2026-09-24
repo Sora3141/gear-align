@@ -214,6 +214,25 @@ async function playPlan(plan) {
       }
       ok(monotone, `${mode.id}: 1 手ごとに残り目安が 1 ずつ減った`);
       ok(byId('overlay').classList.contains('show'), `${mode.id}: ${plan.length} 手でクリア表示が出た`);
+      if (mode === MODES[0]) {
+        // 結果をシェア：文面に手数とコース、リンクに同じ盤面の URL が入る
+        click(byId('share-result'));
+        await sleep(50);
+        const txt = byId('share-text').value;
+        ok(byId('share-sheet').open, '完了画面の「結果をシェア」でシェアのシートが開く');
+        ok(txt.includes(`${plan.length} 手`) && txt.includes(mode.name), `結果の文面に手数とコースが入る（${txt.split('\n')[0]}）`);
+        ok(txt.includes('#' + mode.id + '/') && txt.includes(byId('seed').textContent), 'リンクは同じ盤面の URL（コースとシード入り）');
+        ok(txt.includes('お手本'), '文面にお手本の手数との比べが入る');
+        const xUrl = new URL(byId('share-x').href), lineUrl = new URL(byId('share-line').href);
+        ok(xUrl.hostname === 'x.com' && xUrl.searchParams.get('text').includes('GEAR ALIGN')
+          && xUrl.searchParams.get('url').includes('#' + mode.id), 'X でポストのリンクに文面と URL が入る');
+        ok(lineUrl.hostname === 'line.me' && lineUrl.searchParams.get('text').includes('#' + mode.id), 'LINE で送るのリンクに文面と URL が入る');
+        ok(byId('share-native').hidden === !win().navigator.share, '共有メニューのボタンは使えるブラウザでだけ出る');
+        click(byId('share-copy'));
+        await waitFor(() => byId('share-status').textContent.length > 0, 'コピーの結果');
+        ok(true, `コピーを押すと結果が出る（${byId('share-status').textContent}）`);
+        byId('share-sheet').close();
+      }
       click(byId('hint'));
       click(byId('again'));
       await waitFor(() => !byId('overlay').classList.contains('show'), 'クリア表示が消える');
@@ -511,6 +530,16 @@ async function playPlan(plan) {
     ok(byId('settings').open, '右上のボタンで設定が開く');
     click(byId('settings').querySelector('.sheet-head .icon'));
     ok(!byId('settings').open, '× で閉じる');
+    // この盤面をシェア（設定の中）
+    ok(byId('share-board').closest('dialog') === byId('settings'), '「この盤面をシェア」は設定の中にある');
+    click(byId('share-board'));
+    await sleep(50);
+    ok(byId('share-sheet').open && byId('share-text').value.includes('何手で揃えられる')
+      && byId('share-text').value.includes(byId('seed').textContent), '遊んでいる盤面をすすめる文面と URL が出る');
+    ok(doc().querySelector('meta[property="og:image"]').content.endsWith('og.png')
+      && doc().querySelector('meta[name="twitter:card"]').content === 'summary_large_image', 'リンクのプレビュー（OGP）が設定してある');
+    byId('share-sheet').close();
+
     // アプリとしてインストール：マニフェストとアイコンが揃っていて、設定にボタンがある
     const man = await (await win().fetch(doc().querySelector('link[rel=manifest]').href)).json();
     ok(man.display === 'standalone' && man.start_url && man.name && man.short_name, 'マニフェストに名前・開き方・開始ページがある');
