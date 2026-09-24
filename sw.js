@@ -4,7 +4,9 @@
 // つながっていれば常に最新が出るので、更新のたびに版を上げ忘れても古い画面が残らない。
 // 字体（Google Fonts）は変わらないので「保存した版を先に返し、裏で取り直す」。
 
-const CACHE = 'gear-align-v1';
+// 同じサイト（sora3141.github.io）の別アプリのキャッシュを消さないよう、名前は必ずこの接頭辞で始める
+const PREFIX = 'gear-align-';
+const CACHE = PREFIX + 'v1';
 const SHELL = [
   './', './index.html', './manifest.json', './css/style.css',
   './src/main.js', './src/puzzle.js', './src/modes.js', './src/layout.js', './src/gear.js',
@@ -19,7 +21,7 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    .then((keys) => Promise.all(keys.filter((k) => k.startsWith(PREFIX) && k !== CACHE).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 

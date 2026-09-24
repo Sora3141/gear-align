@@ -29,6 +29,8 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
+/* Safari の上下バーの色は html の背景から取られるので、body と同じ色を html にも塗る（theme-color と同じ） */
+html { background-color: var(--bg); }
 
 /* スマホで連続してタップしたときに、ダブルタップで拡大されないようにする。
    manipulation はスクロールと 2 本指の拡大は残し、ダブルタップの拡大だけを止める
@@ -531,6 +533,11 @@ button.link {
 }
 button.link:hover:not(:disabled) { color: var(--accent-hi); background: none; }
 button.link:active:not(:disabled) { transform: none; box-shadow: none; }
+
+/* 設定の「制作」欄：ポータルへのリンク。button.link と同じ控えめな下線リンク */
+a.credit { color: var(--dim); text-decoration: underline; text-underline-offset: 3px; padding: 4px 2px; font-size: 0.78rem; }
+a.credit:hover { color: var(--accent-hi); }
+a.credit:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 .hintbox {
   display: none;
