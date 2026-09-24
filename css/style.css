@@ -30,6 +30,25 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
 
+/* スマホで連続してタップしたときに、ダブルタップで拡大されないようにする。
+   manipulation はスクロールと 2 本指の拡大は残し、ダブルタップの拡大だけを止める
+   （歯車の上はなぞって回すため、さらに touch-action: none にしてある）。 */
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* ボタンや盤面を長押し・連打しても、文字が選択されたりメニューが出たりしないようにする。
+   シェアの文面など、コピーしたい文字は選べるまま残す */
+button, a.share-link, .tile, .topbar, .console, .plate, #board, .sheet-head, .stage-head {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* iPhone は文字が 16px 未満の入力欄を押すと勝手に拡大するので、指で操作する端末では 16px にする */
+@media (pointer: coarse) {
+  select, textarea, input { font-size: 16px; }
+}
+
 body {
   background-color: var(--bg);
   background-image:

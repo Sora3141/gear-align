@@ -530,6 +530,14 @@ async function playPlan(plan) {
     ok(byId('settings').open, '右上のボタンで設定が開く');
     click(byId('settings').querySelector('.sheet-head .icon'));
     ok(!byId('settings').open, '× で閉じる');
+    // スマホで連続タップしてもダブルタップの拡大が起きない（スクロールと 2 本指の拡大は残す）
+    ok(win().getComputedStyle(doc().documentElement).touchAction === 'manipulation', 'ページ全体がダブルタップで拡大されない');
+    ok(win().getComputedStyle(byId('cw')).userSelect === 'none', '回すボタンを連打しても文字が選択されない');
+    ok(win().getComputedStyle(byId('share-text')).userSelect !== 'none', 'シェアの文面は選んでコピーできる');
+    ok(cssRules.some((r) => (r.conditionText || r.media?.mediaText || '').includes('pointer: coarse')
+      && [...r.cssRules].some((x) => /select/.test(x.selectorText) && x.style.fontSize === '16px')),
+      '指で操作する端末では、入力欄を押しても拡大されない大きさ（16px）にする');
+
     // この盤面をシェア（設定の中）
     ok(byId('share-board').closest('dialog') === byId('settings'), '「この盤面をシェア」は設定の中にある');
     click(byId('share-board'));
