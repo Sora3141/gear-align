@@ -169,7 +169,7 @@ main {
   flex-direction: column;
   align-items: center;
   gap: 18px;
-  padding: 6px max(16px, env(safe-area-inset-left)) 44px max(16px, env(safe-area-inset-right));
+  padding: 6px max(16px, env(safe-area-inset-right)) 44px max(16px, env(safe-area-inset-left));
 }
 
 .stage { position: relative; width: 100%; max-width: 640px; }
