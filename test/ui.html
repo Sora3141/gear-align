@@ -1,0 +1,615 @@
+<!doctype html>
+<!-- 実際の index.html を iframe で動かし、クリック操作だけで通しで遊べるかを確かめる。
+     使い方:  ./serve.sh のあと、ブラウザで /test/ui.html を開く -->
+<html lang="ja"><head><meta charset="utf-8"><title>UI smoke test</title>
+<style>body{font:13px/1.9 ui-monospace,monospace;background:#111;color:#ddd;padding:16px;margin:0}
+iframe{width:430px;height:1300px;border:1px solid #333;float:right;margin-left:16px}
+#log b{color:#8f8}#log i{color:#f88;font-style:normal}#log u{color:#fd8;text-decoration:none}</style></head><body>
+<iframe id="app" src="../index.html"></iframe>
+<div id="log">起動中…</div>
+<script type="module">
+import { GearPuzzle } from '../src/puzzle.js';
+import { MODES, getMode, MODULE, liftOptions } from '../src/modes.js';
+import { buildLayout, poweredSet } from '../src/layout.js';
+import { planFor } from '../src/solve.js';
+import { mulberry32, seedNumber } from '../src/rng.js';
+
+const logEl = document.getElementById('log');
+const log = (s) => { logEl.innerHTML += '<br>' + s; };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const app = document.getElementById('app');
+const doc = () => app.contentDocument;
+const win = () => app.contentWindow;
+const gears = () => [...doc().querySelectorAll('.gear')];
+const gear = (k) => doc().querySelector(`.gear[data-index="${k}"]`);
+const byId = (id) => doc().getElementById(id);
+const click = (el) => el.dispatchEvent(new (win().MouseEvent)('click', { bubbles: true }));
+const change = (el, v) => { el.value = String(v); el.dispatchEvent(new (win().Event)('change', { bubbles: true })); };
+
+// 持ち上げた歯車は最前面へ移る（DOM 順が変わる）ので data-index で並べ直す
+function byIndex(read) {
+  const out = [];
+  for (const g of gears()) out[Number(g.dataset.index)] = read(g);
+  return out;
+}
+const readAngles = () => byIndex((g) =>
+  parseFloat(/rotate\(([-\d.]+)deg\)/.exec(g.querySelector('.spin').style.transform)[1]));
+const readTeeth = () => byIndex((g) => Number(g.dataset.teeth));
+// 小さすぎる歯車にはラベルを出さない（null が返る）
+const readChips = () => byIndex((g) => {
+  const t = g.querySelector('.chip-teeth');
+  return t ? t.textContent + '/' + g.querySelector('.chip-angle').textContent : null;
+});
+const readCenters = () => byIndex((g) => {
+  const m = /translate\(([-\d.]+),([-\d.]+)\)/.exec(g.getAttribute('transform'));
+  return { x: Number(m[1]), y: Number(m[2]) };
+});
+
+async function waitFor(fn, label, ms = 10000) {
+  for (let t = 0; t < ms; t += 25) { if (fn()) return true; await sleep(25); }
+  throw new Error('待機がタイムアウト: ' + label);
+}
+
+let pass = 0, fail = 0;
+const ok = (c, m) => { if (c) { pass++; log('<b>OK</b> ' + m); } else { fail++; log('<i>NG</i> ' + m); } };
+const near = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
+const count = (mode, size) => buildLayout(mode, size).cells.length;
+
+// ステージ（並べ方 × 大きさ）を 1 つ選ぶ
+const pickStage = (id, size) => {
+  const r = byId('mesh').querySelector(`input[value="${id}/${size}"]`);
+  r.checked = true;
+  r.dispatchEvent(new (win().Event)('change', { bubbles: true }));
+};
+
+async function setBoard(mode, size, lifts = 1) {
+  pickStage(mode.id, size);
+  await waitFor(() => gears().length === count(mode, size), `${mode.id} size=${size} への切り替え`);
+  if (byId('lifts').value !== String(lifts)) change(byId('lifts'), lifts);
+  await sleep(50);
+}
+
+function mirror(mode, size, lifts = 1) {
+  const p = new GearPuzzle(buildLayout(mode, size), lifts);
+  const ang = readAngles();
+  for (let k = 0; k < p.size; k++) p.a[k] = Math.round((ang[k] * p.teethOf(k)) / 360);
+  return p;
+}
+
+// アプリと同じ手順で盤面を作り直す（同じシードなら同じ盤面・同じ目標になる）
+function reproduce(mode, size, lifts, seed, goal) {
+  const p = new GearPuzzle(buildLayout(mode, size), lifts);
+  if (goal === 'd') p.goalMode = 'distinct';
+  else if (goal !== null) { p.goalMode = 'dir'; p.goal = (goal * 45 * p.G) / 360; }
+  for (let t = 0; t < 8; t++) {
+    if (p.shuffle(mulberry32(seedNumber(seed + (t ? String(t) : '')))) !== false) break;
+  }
+  return p;
+}
+
+// 手順どおりにクリックして解く
+async function playPlan(plan) {
+  let held = [];
+  for (const mv of plan.moves) {
+    if (held.join() !== mv.lift.join()) {
+      for (const k of held) click(gear(k));
+      for (const k of mv.lift) click(gear(k));
+      held = mv.lift.slice();
+      await sleep(30);
+    }
+    click(byId(mv.d > 0 ? 'cw' : 'ccw'));
+    await sleep(460);
+  }
+}
+
+(async () => {
+  try {
+    await waitFor(() => doc() && doc().querySelector('.gear'), 'アプリの起動');
+
+    for (const mode of MODES) {
+      log(`<u>— ${mode.name} —</u>`);
+      const size = mode.size;
+      await setBoard(mode, size);
+      const layout = buildLayout(mode, size);
+
+      // 歯数が DOM に出ていて、盤面の歯数構成と一致する
+      ok(JSON.stringify(readTeeth()) === JSON.stringify(layout.teeth),
+        `${mode.id}: 歯数 ${[...new Set(layout.teeth.filter((t, i) => !layout.isDriver[i]))].join('/')} が盤面どおり`);
+
+      // 幾何：噛み合う相手との中心間距離が「半径の和」になっている
+      const cen = readCenters();
+      let meshOk = true;
+      for (const [a, b] of layout.edges) {
+        const d = Math.hypot(cen[a].x - cen[b].x, cen[a].y - cen[b].y);
+        if (!near(d, (MODULE * (layout.teeth[a] + layout.teeth[b])) / 2, 0.01)) meshOk = false;  // DOM は丸めた座標
+      }
+      ok(meshOk, `${mode.id}: 噛み合う ${layout.edges.length} 組すべて中心間距離が m(T₁+T₂)/2`);
+      ok(layout.signs.every((s2, k) => layout.adj[k].every((j) => layout.signs[j] === -s2)),
+        `${mode.id}: 噛み合う相手とは必ず逆回り`);
+
+      // ラベルは「歯数 / 1 手の回転角」
+      const chips = readChips();
+      ok(chips.every((c, k) => {
+        if (layout.isDriver[k]) return c === null;   // 原動力にはラベルを出さない
+        const [t, a] = c.split('/');
+        const want = Math.round((mode.step * 360) / layout.teeth[k] * 10) / 10;
+        return Number(t) === layout.teeth[k] && a === `${want}°`;
+      }), `${mode.id}: 歯数と回転角のラベルが正しい（${chips.filter(Boolean).length}/${chips.length} 個に表示）`);
+      // 一番小さい歯車でも 8 枚歯（ピッチ円半径 30）あって、ラベルが読める大きさになっている
+      ok(Math.min(...layout.teeth.filter((t, i) => !layout.isDriver[i])) >= 8,
+        `${mode.id}: 歯数は 8 以上`);
+
+      // 凡例は盤面にある歯数の種類ぶん
+      // 凡例は矢印のある歯車の歯数だけ（原動力は数えない）
+      const kinds = new Set(layout.teeth.filter((t, i) => !layout.isDriver[i]));
+      ok(doc().querySelectorAll('.legend-item').length === kinds.size,
+        `${mode.id}: 凡例が歯数の種類ぶん（${kinds.size} 個）出ている`);
+
+      const p = mirror(mode, size);
+      ok(!p.isSolved(), `${mode.id}: 配り直した直後は揃っていない`);
+
+      // 原動力：矢印を持たず、持ち上げられない
+      const drivers = gears().filter((g) => g.dataset.driver === '1');
+      ok(drivers.length === layout.drivers.length, `${mode.id}: 原動力が ${layout.drivers.length} 個ある`);
+      ok(drivers.every((g) => !g.querySelector('.index') && g.querySelector('.crank')),
+        `${mode.id}: 原動力には矢印が無く取っ手が付いている`);
+      const dIdx = Number(drivers[0].dataset.index);
+      click(gear(dIdx));
+      ok(!gear(dIdx).classList.contains('lifted'), `${mode.id}: 原動力は持ち上げられない`);
+
+      // 回す向きの基準：2 つの原動力は同じ向きに回り、どちらにも向きの矢印が付いている
+      ok(layout.signs[layout.drivers[0]] === layout.signs[layout.drivers[1]],
+        `${mode.id}: 2 つの原動力が同じ向きに回る`);
+      ok(doc().querySelectorAll('.spinhints').length === layout.drivers.length,
+        `${mode.id}: 原動力の数だけ向きの矢印が置かれている`);
+
+      // 持ち上げる前は回せない
+      // （この検査は「どこも切り離さない」持ち上げ方で行う）
+      const pick = layout.liftable.findIndex((v, k) => v
+        && poweredSet(layout.adj, layout.drivers, [k]).size === layout.cells.length - 1);
+      ok(byId('cw').disabled, `${mode.id}: 持ち上げる前は回せない`);
+
+      // 1 手で回る角度が歯数どおりか（歯数が違えば角度も違う）
+      const before = readAngles();
+      click(gear(pick));
+      ok(gear(pick).classList.contains('lifted'), `${mode.id}: クリックした歯車が持ち上がる`);
+      ok(doc().getElementById('gears').firstElementChild === gear(pick),
+        `${mode.id}: 持ち上げた歯車は一番後ろに描かれる（奥に下がる）`);
+      ok(!byId('cw').disabled, `${mode.id}: 1 つ持ち上げると回せる`);
+      click(byId('cw'));
+      await sleep(460);
+      const after = readAngles();
+      ok(near(after[pick], before[pick]), `${mode.id}: 持ち上げた歯車は回らない`);
+      let angleOk = true; const angles = new Set();
+      for (let k = 0; k < layout.cells.length; k++) {
+        if (k === pick) continue;
+        const want = (layout.signs[k] * mode.step * 360) / layout.teeth[k];
+        if (!near(after[k] - before[k], want, 1e-6)) angleOk = false;
+        if (!layout.isDriver[k]) angles.add(Math.abs(want));
+      }
+      ok(angleOk, `${mode.id}: 原動力を含む残り全部が step·360/歯数 だけ回った（${[...angles].sort((a, b) => a - b).join('/')}°）`);
+      click(byId('undo'));
+      await sleep(460);
+      ok(JSON.stringify(readAngles()) === JSON.stringify(before), `${mode.id}: 1 手戻すと元に戻る`);
+      click(gear(pick));
+
+      // ヒントに従うと残り手数が 1 ずつ減り、最後にクリアする
+      byId('hint').classList.contains('on') || click(byId('hint'));
+      await sleep(40);
+      const plan = planFor(mirror(mode, size));
+      ok(byId('remain').textContent === `${plan.length} 手`,
+        `${mode.id}: 残り目安 ${byId('remain').textContent} が手順の長さと一致`);
+      let left = plan.length, monotone = true, lifted = [];
+      for (const mv of plan.moves) {
+        if (lifted.join() !== mv.lift.join()) {
+          for (const k of lifted) click(gear(k));
+          for (const k of mv.lift) click(gear(k));
+          lifted = mv.lift.slice();
+          await sleep(30);
+        }
+        click(byId(mv.d > 0 ? 'cw' : 'ccw'));
+        await sleep(460);
+        left--;
+        if (left > 0 && byId('remain').textContent !== `${left} 手`) monotone = false;
+      }
+      ok(monotone, `${mode.id}: 1 手ごとに残り目安が 1 ずつ減った`);
+      ok(byId('overlay').classList.contains('show'), `${mode.id}: ${plan.length} 手でクリア表示が出た`);
+      click(byId('hint'));
+      click(byId('again'));
+      await waitFor(() => !byId('overlay').classList.contains('show'), 'クリア表示が消える');
+    }
+
+    log('<u>— そのほか —</u>');
+    // 盤面の大きさ（格子・一列それぞれ）
+    for (const [id, size] of [['m90', 6], ['t5', 9], ['r4', 16], ['s4', 3]]) {
+      const mode = getMode(id);
+      await setBoard(mode, size);
+      ok(gears().length === count(mode, size), `${id} ${size}: 歯車が ${count(mode, size)} 個`);
+    }
+
+    // 歯数表示のトグル
+    await setBoard(getMode('t4'), 7, 1);
+    ok(byId('board').classList.contains('labels'), '歯数表示は既定で ON');
+    click(byId('labels'));
+    ok(!byId('board').classList.contains('labels'), '歯数表示を切り替えられる');
+    click(byId('labels'));
+
+    // シードで同じ盤面が再現される
+    const seed = byId('seed').textContent;
+    const shot = readAngles().join(',');
+    click(byId('shuffle'));
+    await sleep(60);
+    ok(byId('seed').textContent !== seed, 'シャッフルでシードが変わる');
+    win().location.hash = `#t4/7/1/f/${seed}`;
+    win().location.reload();
+    await waitFor(() => doc() && doc().querySelector('.gear') && byId('seed') && byId('seed').textContent === seed, '同じシードで読み直し');
+    await sleep(60);
+    ok(readAngles().join(',') === shot, '同じシードなら同じ盤面が出る');
+
+    // 自動で解く（ソルバー）
+    ok(byId('solve').closest('dialog') === null, '自動で解くボタンは本画面にある');
+    ok(byId('moves').textContent === '0', '押す前は 0 手');
+    click(byId('solve'));
+    ok(byId('confirm').open, '押すといきなり動かず確認が出る');
+    const len = Number(/(\d+)/.exec(byId('confirm-count').textContent)[1]);
+    ok(len > 0, `確認に手数が出る（${len} 手）`);
+    click(byId('confirm').querySelector('.sheet-head .icon'));
+    ok(!byId('confirm').open, '確認をやめられる');
+    ok(byId('moves').textContent === '0', 'やめたら盤面は動いていない');
+
+    // 歯車をなぞって回す：円を描くように動かすと 1 手ぶんごとに回り、離したとき半分以上なら 1 手進める
+    await setBoard(getMode('m90'), 3, 1);
+    await sleep(80);
+    const P = (type, el2, x, y) => el2.dispatchEvent(new (win().PointerEvent)(type,
+      { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 7, button: 0, isPrimary: true }));
+    // 歯車 k の中心のまわりを deg 度（正で時計回り）なぞる
+    async function stroke(k, deg, click2 = true) {
+      const g = gear(k), hit = g.querySelector('.hit');
+      const b = hit.getBoundingClientRect();
+      const cx = b.left + b.width / 2, cy = b.top + b.height / 2, r = b.width * 0.35;
+      const at = (t) => [cx + r * Math.cos(t), cy + r * Math.sin(t)];
+      let t = -Math.PI / 2;
+      P('pointerdown', hit, ...at(t));
+      const steps = Math.max(2, Math.ceil(Math.abs(deg) / 8));
+      for (let i = 1; i <= steps; i++) { t = -Math.PI / 2 + (deg * Math.PI / 180) * (i / steps); P('pointermove', hit, ...at(t)); }
+      P('pointerup', hit, ...at(t));
+      if (click2) click(hit);                    // 実機では pointerup のあとに click が来る
+      await sleep(500);
+    }
+    const lay = buildLayout(getMode('m90'), 3);
+    const drv = lay.drivers[0];
+    const plain = lay.cells.findIndex((c, i) => !c.driver && i !== lay.adj[drv][0]);
+    await stroke(plain, 120);
+    ok(byId('moves').textContent === '0', '持ち上げる前は、なぞっても回らない');
+    ok(!gear(plain).classList.contains('lifted'), 'なぞった操作は持ち上げにならない');
+    click(gear(plain));                          // 1 つ持ち上げる
+    ok(gear(plain).classList.contains('lifted'), 'タップすると持ち上がる（これまでどおり）');
+    const stepDrv = (4 * 360) / lay.teeth[drv];
+    const before3 = readAngles();
+    await stroke(drv, stepDrv * 1.2);           // 1.2 手ぶん時計回り
+    const after3 = readAngles();
+    ok(byId('moves').textContent === '1', `原動力を 1.2 手ぶんなぞると 1 手進む（${byId('moves').textContent} 手）`);
+    ok(near(after3[drv] - before3[drv], stepDrv), `なぞった原動力は時計回りに 1 手ぶん回る（${(after3[drv] - before3[drv]).toFixed(1)}°）`);
+    ok(near(after3[plain], before3[plain]), '持ち上げた歯車は回らない');
+    ok(gear(plain).classList.contains('lifted'), 'なぞったあとも持ち上げたまま');
+    const host2 = lay.adj[drv][0];
+    ok(near(after3[host2] - before3[host2], -((4 * 360) / lay.teeth[host2])), '噛み合う歯車は逆向きに回る');
+    await stroke(drv, stepDrv * 0.6);           // 半分以上なら、離したとき 1 手進める
+    ok(byId('moves').textContent === '2', '半分以上なぞって離すと、その手まで進む');
+    await stroke(drv, -stepDrv * 0.3);          // 足りなければ元に戻る
+    ok(byId('moves').textContent === '2', '半分に届かなければ元の位置に戻る');
+    await stroke(host2, -((4 * 360) / lay.teeth[host2]) * 2.1);
+    ok(byId('moves').textContent === '4', '盤面の歯車をなぞっても回せる（反時計回りに 2 手）');
+    await stroke(plain, 200);
+    ok(byId('moves').textContent === '4' && gear(plain).classList.contains('lifted'), '持ち上げた歯車はなぞっても回らない');
+    click(byId('undo'));
+    await sleep(500);
+    ok(byId('moves').textContent === '3', 'なぞって回した手も 1 手戻せる');
+
+    // 解答の再生：途中で止めて 1 手戻れること（手数の多い盤面で確かめる）
+    await setBoard(getMode('m22'), 6, 1);
+    ok(byId('player').hidden, 'ふだんは解答プレーヤーが出ていない');
+    click(byId('solve'));
+    click(byId('confirm-go'));
+    await waitFor(() => !byId('player').hidden && Number(byId('moves').textContent) >= 2, '解答の再生の開始', 30000);
+    ok(byId('p-play').textContent === '停止' && byId('p-play').classList.contains('playing'), '再生中は再生ボタンが「停止」になる');
+    ok(byId('solve').textContent === '解答を閉じる', '自動で解くボタンが「解答を閉じる」になる');
+    ok(byId('cw').disabled && byId('shuffle').disabled && byId('hint').disabled, '再生中は手動の操作を止める');
+    click(gears().find((g) => !g.dataset.driver && !g.classList.contains('lifted')));
+    ok(true, '再生中に歯車を押しても割り込まない（例外にならない）');
+    click(byId('p-play'));                       // 停止
+    await waitFor(() => byId('p-play').textContent === '再生', '停止', 5000);
+    await sleep(900);
+    const stopped = Number(byId('moves').textContent);
+    await sleep(900);
+    ok(Number(byId('moves').textContent) === stopped, `停止すると ${stopped} 手目で止まったまま`);
+    ok(byId('player-status').textContent === `${stopped} / ${Number(byId('scrub').max)} 手`, 'プレーヤーに何手目かが出る');
+    const anglesAt = readAngles().join(',');
+    click(byId('p-back'));
+    await waitFor(() => Number(byId('moves').textContent) === stopped - 1, '1 手戻る', 5000);
+    ok(readAngles().join(',') !== anglesAt, '1 手戻ると歯車が戻る');
+    await sleep(600);
+    click(byId('p-fwd'));
+    await waitFor(() => Number(byId('moves').textContent) === stopped, '1 手進む', 5000);
+    await sleep(600);
+    ok(readAngles().join(',') === anglesAt, '1 手進むと元の盤面に戻る');
+    click(byId('p-first'));
+    ok(byId('moves').textContent === '0' && byId('p-back').disabled, '最初へ飛ぶと 0 手目になり、戻るは押せない');
+    change(byId('scrub'), 3);
+    byId('scrub').dispatchEvent(new (win().Event)('input', { bubbles: true }));
+    ok(byId('moves').textContent === '3', 'シークバーで好きな手へ飛べる');
+    click(byId('solve'));                       // 解答を閉じる
+    await sleep(100);
+    ok(byId('player').hidden && byId('solve').textContent === '自動で解く', '閉じるとプレーヤーが消える');
+    ok(byId('moves').textContent === '3', '閉じても盤面はそのまま（3 手目から自分で続けられる）');
+    ok(!byId('shuffle').disabled && !byId('hint').disabled, '閉じたあとは手動の操作に戻る');
+
+    // 小さい盤面で最後まで再生させる：完了画面を出さず、揃った盤面をそのまま見せる
+    await setBoard(getMode('m90'), 3, 1);
+    click(byId('solve'));
+    const len2 = Number(/(\d+)/.exec(byId('confirm-count').textContent)[1]);
+    click(byId('confirm-go'));
+    await waitFor(() => byId('player-status').textContent.includes('揃いました') && byId('p-play').textContent === 'もう一度', '最後まで再生', 90000);
+    ok(byId('moves').textContent === String(len2), `${len2} 手で自動で揃った`);
+    ok(!byId('overlay').classList.contains('show'), '自動で揃えても完了画面は出さない');
+    ok(byId('board').classList.contains('solved'), '揃った盤面がそのまま見える');
+    ok(byId('p-play').textContent === 'もう一度' && byId('p-fwd').disabled, '最後まで見ると「もう一度」になり、進むは押せない');
+    click(byId('p-back'));
+    await waitFor(() => Number(byId('moves').textContent) === len2 - 1, '揃ったあとも 1 手戻れる', 5000);
+    ok(!byId('board').classList.contains('solved'), '戻ると揃っていない状態になる');
+    await sleep(600);
+    click(byId('p-last'));
+    ok(byId('moves').textContent === String(len2) && byId('board').classList.contains('solved'), '最後へ飛ぶと揃った盤面に戻る');
+    click(byId('player-close'));
+    await sleep(100);
+    ok(byId('player').hidden, '「閉じて自分で続ける」で閉じる');
+    void len;
+
+    // 2 個持ち上げ
+    await setBoard(getMode('m90'), 3, 2);
+    ok(byId('lifts').value === '2', '持ち上げる数を 2 にできる');
+    const lay2 = buildLayout(getMode('m90'), 3);
+    const two = [];
+    for (let k = 0; k < lay2.cells.length && two.length < 2; k++) if (lay2.liftable[k]) two.push(k);
+    const b2 = readAngles();
+    click(gear(two[0]));
+    ok(byId('cw').disabled, '1 つだけでは回せない');
+    click(gear(two[1]));
+    ok(!byId('cw').disabled, '2 つ持ち上げると回せる');
+    click(byId('cw'));
+    await sleep(460);
+    const a2 = readAngles();
+    ok(two.every((k) => near(a2[k], b2[k])), '持ち上げた 2 つは回らない');
+    ok(a2.filter((v, i) => v !== b2[i]).length === lay2.cells.length - 2, '残り全部が回った');
+
+    // 原動力が噛んでいる歯車も持ち上げられる（原動力が 2 つあるので盤面は止まらない）
+    click(gear(two[0])); click(gear(two[1]));
+    const host = lay2.adj[lay2.drivers[0]][0];
+    click(gear(host));
+    ok(gear(host).classList.contains('lifted'), '原動力が噛んでいる歯車も持ち上げられる');
+    click(gear(host));
+
+    // 原動力から切り離される持ち上げ方：切り離された歯車は回らず、画面でも薄く出る
+    await setBoard(getMode('r4'), 8, 2);
+    const layR = buildLayout(getMode('r4'), 8);
+    let cutPair = null;
+    for (let a = 0; a < layR.cells.length && !cutPair; a++) {
+      for (let b = a + 1; b < layR.cells.length && !cutPair; b++) {
+        if (!layR.liftable[a] || !layR.liftable[b]) continue;
+        const pw = poweredSet(layR.adj, layR.drivers, [a, b]);
+        if (pw.size < layR.cells.length - 2) cutPair = { a, b, pw };
+      }
+    }
+    ok(cutPair !== null, '輪では 2 個外すと切り離される組がある');
+    click(gear(cutPair.a)); click(gear(cutPair.b));
+    const dead = gears().filter((g) => g.classList.contains('unpowered'));
+    ok(dead.length === layR.cells.length - 2 - cutPair.pw.size,
+      `切り離された ${dead.length} 個が薄く表示される`);
+    const bC = readAngles();
+    click(byId('cw'));
+    await sleep(460);
+    const aC = readAngles();
+    let cutOk = true;
+    for (let k = 0; k < layR.cells.length; k++) {
+      const shouldMove = cutPair.pw.has(k) && k !== cutPair.a && k !== cutPair.b;
+      if (shouldMove === near(aC[k], bC[k])) cutOk = false;
+    }
+    ok(cutOk, '原動力とつながっている歯車だけが回り、切り離された歯車は止まったまま');
+    await setBoard(getMode('m90'), 3, 2);
+
+    // 揃える向きの指定
+    await setBoard(getMode('m43'), 3, 1);
+    change(byId('goal'), '2');                         // → 右（0=↑ 1=↗ 2=→ …）
+    await sleep(60);
+    ok(byId('target-label').textContent === '目標の向き', '表示が「目標の向き」に変わる');
+    ok(byId('target').textContent === '→', '指定した向きが出る');
+    ok(win().location.hash.includes('/1/2/'), '共有リンクに向きの指定が入る');
+
+    const pg = mirror(getMode('m43'), 3);
+    pg.goalMode = 'dir';
+    pg.goal = (2 * 45 * pg.G) / 360;
+    const gplan = planFor(pg);
+    ok(gplan !== null && gplan.c === pg.goal, '指定した向きへの手順が作れる');
+    let glift = [];
+    for (const mv of gplan.moves) {
+      if (glift.join() !== mv.lift.join()) {
+        for (const k of glift) click(gear(k));
+        for (const k of mv.lift) click(gear(k));
+        glift = mv.lift.slice();
+        await sleep(30);
+      }
+      click(byId(mv.d > 0 ? 'cw' : 'ccw'));
+      await sleep(460);
+    }
+    ok(byId('overlay').classList.contains('show'), `指定した向きに ${gplan.length} 手で揃えてクリア`);
+    ok(byId('result').textContent.includes('指定どおり'), 'クリア表示に「指定どおり」と出る');
+    click(byId('again'));
+    await sleep(60);
+    change(byId('goal'), 'f');
+    await sleep(60);
+    ok(byId('target-label').textContent === '揃えられる向き', '自由に戻せる');
+
+    // 回すボタンに触れると、ハンドルの周りに回る向きの矢印が出る
+    log('<u>— 回す向きの基準 —</u>');
+    await setBoard(getMode('m90'), 3, 1);
+    ok(byId('cw').textContent.includes('原動力') && byId('cw').textContent.includes('時計'),
+      'ボタンが何を基準にどちら回りかを言っている');
+    ok(byId('ccw').textContent.includes('原動力') && byId('ccw').textContent.includes('反時計'),
+      '左回りのボタンも同じく');
+    ok(doc().querySelectorAll('.spinhint').length === 4,
+      '2 つの原動力それぞれに、両方向ぶんの矢印がある');
+    // 見え方は CSS の役目（ヘッドレスの仮想時間では transition が進まないので、
+    // ここでは「CSS が狙っている状態になっているか」と「その規則があるか」を見る）
+    const cssRules = [...doc().styleSheets].flatMap((ss) => [...ss.cssRules]);
+    const rules = cssRules.map((r) => r.selectorText || '');
+    ok(rules.some((r) => r.includes('preview-cw')) && rules.some((r) => r.includes('preview-ccw')),
+      '向きの矢印を出す規則が CSS にある');
+    const liftRule = cssRules.find((r) => (r.selectorText || '') === '.gear.lifted .lift' && r.style.transform);
+    ok(liftRule && /scale\(0?\.\d+\)/.test(liftRule.style.transform),
+      `持ち上げた歯車を小さくする規則がある（${liftRule ? liftRule.style.transform : 'なし'}）`);
+    const shown = (d) => [...doc().querySelectorAll(`.spinhint.${d}`)]
+      .every((e) => e.matches(`#board.preview-${d} .spinhint.${d}`));
+    ok(!shown('cw') && !shown('ccw'), 'ふだんは出ていない');
+    byId('cw').dispatchEvent(new (win().PointerEvent)('pointerenter', { bubbles: true }));
+    ok(byId('board').classList.contains('preview-cw') && shown('cw') && !shown('ccw'),
+      '右回りに触れると、2 つの原動力の両方に時計回りの矢印が出る');
+    byId('cw').dispatchEvent(new (win().PointerEvent)('pointerleave', { bubbles: true }));
+    ok(!shown('cw'), '離すと消える');
+    byId('ccw').dispatchEvent(new (win().PointerEvent)('pointerenter', { bubbles: true }));
+    ok(shown('ccw') && !shown('cw'), '左回りに触れると反時計回りの矢印が出る');
+    byId('ccw').dispatchEvent(new (win().PointerEvent)('pointerleave', { bubbles: true }));
+
+    // 画面のつくり：ルール設定は本画面に出さず、右上のボタンから開くシートにまとめてある
+    log('<u>— 画面のつくり —</u>');
+    for (const id of ['mesh', 'lifts', 'goal', 'labels', 'sound', 'seed', 'share']) {
+      ok(byId(id).closest('dialog') !== null, `${id} が設定シートの中にある`);
+    }
+    // ステージは「並べ方 × 大きさ」を全部並べ、実際の盤面の絵から選ぶ
+    const stages = MODES.flatMap((m) => m.sizes.map((sz) => [m, sz]));
+    const tiles = [...byId('mesh').querySelectorAll('.tile')];
+    ok(tiles.length === stages.length,
+      `ステージが ${stages.length} 通り（並べ方 ${MODES.length} × それぞれの大きさ）並んでいる`);
+    ok([...byId('mesh').querySelectorAll('.stage-head')].length === MODES.length,
+      '並べ方ごとに見出しが付いている');
+    ok(tiles.every((el2) => el2.querySelector('svg.preview') && el2.querySelector('input[type=radio]')),
+      '各タイルに盤面の絵と選択用のラジオがある');
+    ok(tiles.every((el2, i) => {
+      const n = el2.querySelector('svg.preview').querySelectorAll('g').length;
+      return n === buildLayout(stages[i][0], stages[i][1]).cells.length;
+    }), '絵に描かれている歯車の数が、その大きさの実際の盤面と一致する');
+    ok(tiles.every((el2, i) => el2.querySelector('input').value === `${stages[i][0].id}/${stages[i][1]}`),
+      'タイルが並べ方と大きさの組をそのまま指している');
+
+    const before2 = byId('mesh').querySelector('input:checked').value;
+    pickStage('s4', 6);
+    await sleep(60);
+    ok(byId('mesh').querySelector('input:checked').value === 's4/6' && before2 !== 's4/6',
+      'タイルを選ぶとステージが変わる');
+    ok(gears().length === buildLayout(getMode('s4'), 6).cells.length, '選んだステージの盤面が出る');
+    ok(!byId('settings').open && !byId('help').open, '最初はシートが閉じている');
+    click(byId('settings-open'));
+    ok(byId('settings').open, '右上のボタンで設定が開く');
+    click(byId('settings').querySelector('.sheet-head .icon'));
+    ok(!byId('settings').open, '× で閉じる');
+    // アプリとしてインストール：マニフェストとアイコンが揃っていて、設定にボタンがある
+    const man = await (await win().fetch(doc().querySelector('link[rel=manifest]').href)).json();
+    ok(man.display === 'standalone' && man.start_url && man.name && man.short_name, 'マニフェストに名前・開き方・開始ページがある');
+    ok(man.icons.some((i) => i.sizes === '192x192') && man.icons.some((i) => i.sizes === '512x512')
+      && man.icons.some((i) => i.purpose === 'maskable'), 'アイコンが 192 / 512 / 切り抜き用まで揃っている');
+    const iconUrls = [...man.icons.map((i) => new URL(i.src, doc().querySelector('link[rel=manifest]').href).href),
+      doc().querySelector('link[rel=apple-touch-icon]').href];
+    const codes = await Promise.all(iconUrls.map((u) => win().fetch(u).then((r) => r.status)));
+    ok(codes.every((c) => c === 200), `アイコンのファイルが全部読める（${codes.join(', ')}）`);
+    ok(byId('install').closest('dialog') === byId('settings'), 'インストールのボタンは設定の中にある');
+    ok(byId('install-note').textContent.length > 0, 'インストールの説明が出ている');
+    // iframe の中には beforeinstallprompt が来ないので、ここでは必ず「手順の案内」になる
+    click(byId('install'));
+    await sleep(50);
+    ok(!byId('install-steps').hidden && byId('install-steps').children.length > 0,
+      'インストールの画面が出せないときは、押すと手順を案内する');
+    click(byId('install'));
+    ok(byId('install-steps').hidden, 'もう一度押すと手順を閉じる');
+
+    // コース選択は設定と別のシート。ルール（持ち上げる数・揃える向き）は一覧の下に固定してある
+    ok(byId('mesh').closest('dialog') === byId('course'), 'コースの一覧はコース選択のシートにある');
+    ok(byId('lifts').closest('.sheet-foot') && byId('goal').closest('.sheet-foot')
+      && byId('lifts').closest('dialog') === byId('course'), 'ルールはコース選択の下に固定した欄にある');
+    ok(byId('labels').closest('dialog') === byId('settings'), '表示と音は設定のシートにある');
+    ok(byId('course-name').textContent.includes(getMode('s4').name), 'コースのボタンにいまのコース名が出る');
+    click(byId('course-open'));
+    ok(byId('course').open, 'コースのボタンでコース選択が開く');
+    const body = byId('course').querySelector('.sheet-body');
+    body.scrollTop = body.scrollHeight;
+    const foot = byId('course').querySelector('.sheet-foot').getBoundingClientRect();
+    const box = byId('course').getBoundingClientRect();
+    ok(body.scrollHeight > body.clientHeight && foot.bottom <= box.bottom + 1 && foot.height > 0,
+      '一覧をスクロールしてもルールは下に出たまま');
+    click(byId('course-done'));
+    ok(!byId('course').open, '「このコースで遊ぶ」で閉じる');
+    click(byId('help-open'));
+    ok(byId('help').open, '右上のボタンで遊び方が開く');
+    byId('help').close();
+
+    // 盤面と主要な操作は本画面に出ている
+    for (const id of ['board', 'cw', 'ccw', 'undo', 'hint', 'shuffle']) {
+      ok(byId(id).closest('dialog') === null, `${id} は本画面にある`);
+    }
+
+    // 斜めの向き：作れるステージにだけ選択肢が出る
+    log('<u>— 斜めと「全部ちがう向き」 —</u>');
+    await setBoard(getMode('m45'), 3, 1);
+    const opts = (id) => [...byId(id).options].map((o) => o.value);
+    ok(opts('goal').filter((v) => /^[0-7]$/.test(v)).length === 8,
+      'そろい歯（歯数の最大公約数 16）では 8 方向すべて選べる');
+    await setBoard(getMode('m43'), 3, 1);
+    ok(opts('goal').filter((v) => /^[0-7]$/.test(v)).join() === '0,2,4,6',
+      '大小 16/12（最大公約数 4）では斜めは出ない');
+
+    await setBoard(getMode('m45'), 3, 1);
+    change(byId('goal'), '1');                       // ↗ 右上
+    await sleep(60);
+    ok(byId('target-label').textContent === '目標の向き' && byId('target').textContent === '↗',
+      '斜めを指定すると目標が ↗ になる');
+    const pd = reproduce(getMode('m45'), 3, 1, byId('seed').textContent, 1);
+    ok(JSON.stringify(readAngles()) === JSON.stringify(pd.a.map((v, i) => (v * 360) / pd.T[i])),
+      '同じシードから同じ盤面が再現できる');
+    await playPlan(planFor(pd));
+    ok(byId('overlay').classList.contains('show') && byId('result').textContent.includes('↗'),
+      '斜め ↗ に揃えてクリアできる');
+    click(byId('again'));
+    await sleep(60);
+
+    // 全部ちがう向き：できるステージにだけ選択肢が出る
+    ok(opts('goal').includes('d'), '3×3 では「全部ちがう向き」が選べる');
+    await setBoard(getMode('m90'), 6, 1);
+    ok(!opts('goal').includes('d'), '6×6（歯車 36 個 > 向き 4 通り）では出ない');
+
+    await setBoard(getMode('m43'), 3, 1);
+    change(byId('goal'), 'd');
+    await sleep(60);
+    ok(byId('target').textContent === '全部ちがう向き', '目標が「全部ちがう向き」になる');
+    const pk = reproduce(getMode('m43'), 3, 1, byId('seed').textContent, 'd');
+    ok(!pk.allDifferent(), '配った直後はまだ達成していない');
+    await playPlan(planFor(pk));
+    ok(byId('overlay').classList.contains('show'), '全部ちがう向きにしてクリアできる');
+    ok(byId('result').textContent.includes('全部ちがう向き'), 'クリア表示にルールが出る');
+    const finalAngles = readAngles().filter((v, i) => !buildLayout(getMode('m43'), 3).isDriver[i]);
+    ok(new Set(finalAngles.map((v) => ((v % 360) + 360) % 360)).size === finalAngles.length,
+      '実際に全部ちがう向きになっている');
+    change(byId('goal'), 'f');
+    await sleep(60);
+
+    await setBoard(getMode('m90'), 3, 1);
+    click(byId('again'));
+    await sleep(40);
+    click(byId('sound'));
+    ok(byId('sound').textContent === '音 OFF', '音を切り替えられる');
+    click(byId('sound'));
+    ok(byId('sound').textContent === '音 ON', '音を戻せる');
+  } catch (e) {
+    fail++; log('<i>例外</i> ' + e.message);
+  }
+  document.title = fail === 0 ? `PASS ${pass}/${pass}` : `FAIL ${fail} / ${pass + fail}`;
+  log('<br><b>' + document.title + '</b>');
+})();
+</script></body></html>

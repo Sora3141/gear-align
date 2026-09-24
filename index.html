@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b0d10" />
+<meta name="description" content="歯車を持ち上げて回し、合いマークの向きを全部揃えるパズル。" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<!-- iPhone / iPad のホーム画面から開いたとき、ブラウザの枠なしで全画面にする -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="GEAR ALIGN" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>GEAR ALIGN — 歯車の向きを揃える</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" crossorigin="anonymous" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M16 3l2.2 3.1 3.7-.9.7 3.7 3.6 1.3-1.4 3.5 2.5 2.9-2.9 2.5 1.4 3.5-3.6 1.3-.7 3.7-3.7-.9L16 29l-2.2-3.1-3.7.9-.7-3.7-3.6-1.3 1.4-3.5L4.7 16l2.5-2.9L5.8 9.6l3.6-1.3.7-3.7 3.7.9Z"/>
+      <circle cx="16" cy="16" r="5.2"/>
+      <path class="needle" d="M16 8.5l2.2 6.5h-4.4Z"/>
+    </svg>
+    <h1>GEAR<span>ALIGN</span></h1>
+  </div>
+  <div class="meters">
+    <span class="meter"><i>手数</i><b id="moves">0</b></span>
+    <span class="meter"><i>時間</i><b id="clock">00:00</b></span>
+    <span class="meter dim"><i>ベスト</i><b id="best">—</b></span>
+  </div>
+  <div class="topbar-actions">
+    <button id="course-open" class="course-btn" title="コース選択（C）" aria-label="コース選択">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6 9 4Z"/><path d="M9 4v14M15 6v14"/></svg>
+      <span class="course-text"><i>コース</i><b id="course-name">—</b></span>
+    </button>
+    <button id="help-open" class="icon" title="遊び方（?）" aria-label="遊び方">?</button>
+    <button id="settings-open" class="icon" title="設定（S）" aria-label="設定">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm8.9 3.5c0 .5 0 1-.1 1.4l2 1.6a.5.5 0 0 1 .1.6l-1.9 3.2a.5.5 0 0 1-.6.2l-2.3-1a7.7 7.7 0 0 1-2.4 1.4l-.4 2.5a.5.5 0 0 1-.5.4h-3.8a.5.5 0 0 1-.5-.4l-.4-2.5a7.7 7.7 0 0 1-2.4-1.4l-2.3 1a.5.5 0 0 1-.6-.2L2.1 15.6a.5.5 0 0 1 .1-.6l2-1.6a8.4 8.4 0 0 1 0-2.8l-2-1.6a.5.5 0 0 1-.1-.6l1.9-3.2a.5.5 0 0 1 .6-.2l2.3 1a7.7 7.7 0 0 1 2.4-1.4l.4-2.5a.5.5 0 0 1 .5-.4h3.8a.5.5 0 0 1 .5.4l.4 2.5a7.7 7.7 0 0 1 2.4 1.4l2.3-1a.5.5 0 0 1 .6.2l1.9 3.2a.5.5 0 0 1-.1.6l-2 1.6c.1.4.1.9.1 1.4Z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <div class="stage" id="stage">
+    <!-- 地板：歯車を載せる金属の板。四隅のビスと刻印は飾り -->
+    <div class="plate">
+      <span class="screw tl" aria-hidden="true"></span>
+      <span class="screw tr" aria-hidden="true"></span>
+      <span class="screw bl" aria-hidden="true"></span>
+      <span class="screw br" aria-hidden="true"></span>
+      <div class="board-wrap">
+        <svg id="board" viewBox="0 0 440 440" role="application" aria-label="歯車盤面"></svg>
+      </div>
+      <span class="plate-cal" id="plate-cal" aria-hidden="true"></span>
+      <span class="plate-mark" aria-hidden="true">PRECISION GEAR TRAIN · 2 DRIVERS</span>
+    </div>
+    <p class="toast" id="notice"></p>
+    <div class="overlay" id="overlay">
+      <div class="card">
+        <span class="card-kicker">ALIGNED</span>
+        <h2 id="win-title">そろいました</h2>
+        <p id="result"></p>
+        <p class="rec" id="record"></p>
+        <div class="row">
+          <button id="again" class="primary">次の盤面</button>
+          <button id="retry">同じ盤面をもう一度</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="console" id="console" aria-label="操作">
+    <p class="context">
+      <span class="readout"><i id="target-label">揃えられる向き</i><b id="target">—</b></span>
+      <span class="readout"><i id="selected-label">持ち上げ中</i><b id="selected">なし</b></span>
+    </p>
+
+    <div class="legend" id="legend"></div>
+
+    <div class="actions">
+      <button id="ccw" class="turn">
+        <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5.6 9.2A7.5 7.5 0 1 1 4.5 13"/><path class="head" d="M3.2 4.8l.9 5.6 5.4-1.8Z"/></svg></span>
+        <span class="lab">原動力を<wbr>左回り<small>反時計まわり ・ ←</small></span>
+      </button>
+      <button id="cw" class="turn">
+        <span class="lab">原動力を<wbr>右回り<small>時計まわり ・ →</small></span>
+        <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18.4 9.2A7.5 7.5 0 1 0 19.5 13"/><path class="head" d="M20.8 4.8l-.9 5.6-5.4-1.8Z"/></svg></span>
+      </button>
+    </div>
+
+    <!-- 解答プレーヤー：自動で解くと、回すボタンの代わりにここが出る -->
+    <div class="player" id="player" hidden>
+      <div class="player-head">
+        <span class="player-tag">解答の再生</span>
+        <b id="player-status">0 / 0 手</b>
+        <button id="player-close" class="link">閉じて自分で続ける</button>
+      </div>
+      <input type="range" id="scrub" class="scrub" min="0" max="0" step="1" value="0" aria-label="解答の何手目を見るか" />
+      <div class="player-keys">
+        <button id="p-first" class="pk-first" title="最初へ（Home）">最初へ</button>
+        <button id="p-back" class="pk-back" title="1 手戻る（←）">1 手戻る</button>
+        <button id="p-play" class="pk-play" title="再生／停止（Space）">再生</button>
+        <button id="p-fwd" class="pk-fwd" title="1 手進む（→）">1 手進む</button>
+        <button id="p-last" class="pk-last" title="最後へ（End）">最後へ</button>
+      </div>
+      <p class="player-note">自動の解答を見た盤面は、自己ベストに残りません</p>
+    </div>
+
+    <div class="actions minor">
+      <button id="undo" class="k-undo">1 手戻す</button>
+      <button id="hint" class="k-hint" aria-pressed="false">ヒント</button>
+      <button id="solve" class="k-solve">自動で解く</button>
+      <button id="shuffle" class="k-new">新しい盤面</button>
+    </div>
+
+    <div class="hintbox" id="hintbox">
+      <span>残り目安 <b id="remain">—</b></span>
+      <button id="suggest">次の一手</button>
+    </div>
+  </section>
+</main>
+
+<dialog id="confirm" class="sheet narrow">
+  <form method="dialog" class="sheet-head">
+    <h2>自動で解く</h2>
+    <button class="icon" aria-label="閉じる">×</button>
+  </form>
+  <div class="sheet-body prose">
+    <p>
+      いまの盤面は <b id="confirm-count">—</b> で揃います。その手順を頭から再生します。
+    </p>
+    <p><b>再生・停止・1 手戻る／進む</b>とシークで、手順を好きなところから見直せます。
+      揃っても完了画面は出さず、揃った盤面をそのまま見せます。</p>
+    <p>解答を見た盤面は、あとで自分で揃えても<b>自己ベストには残りません</b>。</p>
+    <div class="row end">
+      <form method="dialog"><button>やめる</button></form>
+      <button id="confirm-go" class="primary">自動で解く</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="course" class="sheet course">
+  <form method="dialog" class="sheet-head">
+    <h2>コース選択</h2>
+    <button class="icon" aria-label="閉じる">×</button>
+  </form>
+  <div class="sheet-body">
+    <div class="picker" id="mesh" role="radiogroup" aria-label="遊ぶコース"></div>
+  </div>
+  <!-- ルールは一覧をどこまでスクロールしても下に出したまま -->
+  <div class="sheet-foot">
+    <p class="note" id="mode-note"></p>
+    <div class="rules">
+      <label class="rule">
+        <span>持ち上げる数</span>
+        <select id="lifts" aria-label="1 手で持ち上げる歯車の数"></select>
+      </label>
+      <label class="rule">
+        <span>揃える向き</span>
+        <select id="goal" aria-label="揃える向きの指定"></select>
+      </label>
+      <form method="dialog" class="rule go">
+        <button id="course-done" class="primary">このコースで遊ぶ</button>
+      </form>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="settings" class="sheet narrow">
+  <form method="dialog" class="sheet-head">
+    <h2>設定</h2>
+    <button class="icon" aria-label="閉じる">×</button>
+  </form>
+  <div class="sheet-body">
+    <div class="field toggles">
+      <span>表示と音</span>
+      <div class="row">
+        <button id="labels" class="on" aria-pressed="true">歯数を表示</button>
+        <button id="sound" class="on">音 ON</button>
+      </div>
+    </div>
+
+    <div class="field install">
+      <span>アプリ</span>
+      <div class="install-box">
+        <button id="install" class="primary install-btn">アプリとしてインストール</button>
+        <p class="install-note" id="install-note"></p>
+        <ol class="install-steps" id="install-steps" hidden></ol>
+      </div>
+    </div>
+
+    <div class="field">
+      <span>シード</span>
+      <div class="row">
+        <code id="seed">—</code>
+        <button id="share" class="link">リンクをコピー</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="help" class="sheet">
+  <form method="dialog" class="sheet-head">
+    <h2>遊び方</h2>
+    <button class="icon" aria-label="閉じる">×</button>
+  </form>
+  <div class="sheet-body prose">
+    <p>
+      灰色の<b>原動力</b>（ハンドルの付いた無地の歯車）が回すと、噛み合った歯車が隣どうし
+      逆向きに回ります。歯車を選ぶとそれだけ<b>奥に下がって</b>噛み合いから外れます
+      （小さくなって隣との間に隙間ができるので、外れたことが形で分かります）。
+      <b>「持ち上げて回す」を繰り返して、合いマーク（白い印）を全部同じ向きに</b>。
+    </p>
+    <ol>
+      <li>歯車をクリックして、決まった数だけ持ち上げる（もう一度押すと下ろす）。</li>
+      <li><b>原動力</b>（金色の取っ手が付いた黒い歯車）を左右どちらかに回すと、
+        持ち上げたものを<b>除く</b>全部が連動して回る。ボタンに触れると、
+        2 つの原動力の周りに回る向きの矢印が出る。
+        <b>歯車を指やマウスで円を描くようになぞっても回せる</b>（原動力のクランクでも、盤面の歯車でもよい）。
+        その歯車の 1 手ぶん回すごとに 1 手。離したとき半分以上回っていればその手まで進み、足りなければ戻る。</li>
+      <li>合いマークが全部同じ向きになればクリア。合いマークはボスからリムへ引いた白い線と、リムの白い塗り（向きはこの塗りで読む）。原動力には合いマークが無いので揃える対象ではない。</li>
+    </ol>
+
+    <h3>歯数を見れば、回る角度が分かる</h3>
+    <p>
+      噛み合う歯車は「送られる歯数」が同じなので、1 手 <i>s</i> 歯送りなら歯数 <i>T</i> の歯車は
+      <b><i>s</i>×360/<i>T</i> 度</b>回ります。歯が少ないほど大きく回る。
+      歯は 1 枚おきに濃く、色も歯数ごとに変えてあるので数えやすくしてあります。
+    </p>
+
+    <h3>原動力は 2 つ</h3>
+    <p>
+      <b>回す向きは原動力が基準</b>です。噛み合う歯車は隣どうし逆に回るので、
+      どれを基準にするかを決めないと「右回り」が決まりません。盤面の
+      <b>2 つの原動力は必ず同じ向きに回る</b>ように置いてあり、ボタンはその向きを指しています
+      （そのために、原動力を付ける相手の市松を揃えてあります）。
+    </p>
+    <p>
+      回して動くのは<b>原動力とつながっている歯車だけ</b>。持ち上げ方によっては伝達が切れて
+      その先が止まります（<b>薄く点線</b>で表示）。原動力が 1 つだとその相手を持ち上げた瞬間に
+      盤面が全部止まってしまうので、必ず 2 つ置いてあります。原動力自体は持ち上げられません。
+    </p>
+
+    <h3>揃える向きの指定</h3>
+    <p>
+      コース選択の下にある「揃える向き」で <b>↑ ↗ → ↘ ↓ ↙ ← ↖</b> を選ぶと、その向きでないとクリアになりません。
+      盤面はその向きから配り直すので、指定した向きには必ず揃えられます。
+      斜めは「45° がその盤面で作れる角度」になっているコースにだけ出ます
+      （歯数の最大公約数が 8 の倍数のとき）。
+    </p>
+    <p>
+      <b>「全部ちがう向き」</b>を選ぶと、逆にすべての歯車をばらばらの向きにするのが目標になります。
+      歯車 k が向けられるのは限られた向きだけなので、歯車と向きの組み合わせが取れるコース
+      （歯車の数 ≤ 向けられる向きの数）にだけ出ます。
+    </p>
+
+    <h3>並べ方</h3>
+    <p>
+      正方格子は 4 つの歯車が輪になるため、<b>歯数を 2 種類までしか置けません</b>。
+      3 種類以上を混ぜたいときは一列・輪・星を選んでください。
+    </p>
+
+    <h3>キー操作</h3>
+    <p class="keys">
+      <kbd>←</kbd><kbd>→</kbd> 回す ／ <kbd>1</kbd>–<kbd>9</kbd> 選ぶ ／ <kbd>Esc</kbd> 下ろす ／
+      <kbd>Z</kbd> 戻す ／ <kbd>H</kbd> ヒント ／ <kbd>L</kbd> 歯数表示 ／
+      <kbd>N</kbd> 新しい盤面 ／ <kbd>C</kbd> コース選択 ／ <kbd>S</kbd> 設定 ／ <kbd>?</kbd> 遊び方
+    </p>
+    <p class="keys">
+      解答の再生中：<kbd>Space</kbd> 再生／停止 ／ <kbd>←</kbd><kbd>→</kbd> 1 手戻る／進む ／
+      <kbd>Home</kbd><kbd>End</kbd> 最初／最後 ／ <kbd>Esc</kbd> 閉じる
+    </p>
+  </div>
+</dialog>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
