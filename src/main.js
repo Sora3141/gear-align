@@ -892,11 +892,16 @@ $('labels').addEventListener('click', () => {
   render();
 });
 
+function showSound() {
+  const on = sound.isEnabled();
+  $('sound').classList.toggle('on', on);
+  $('sound').textContent = on ? '音 ON' : '音 OFF';
+}
+showSound();   // 前回の設定を出す
 $('sound').addEventListener('click', () => {
   const on = !sound.isEnabled();
   sound.setEnabled(on);
-  $('sound').classList.toggle('on', on);
-  $('sound').textContent = on ? '音 ON' : '音 OFF';
+  showSound();
   if (on) sound.lift();
 });
 
